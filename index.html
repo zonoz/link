@@ -1,0 +1,386 @@
+<html>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<header>
+    <script src="js/jquery-3.3.1.min.js" type="text/javascript"></script>
+    <link href="css/main.css" rel="stylesheet">
+
+    <script type="text/javascript">
+        $(function(){
+            var max_row = 7;
+            var max_col = 7;
+
+            //二维数组--储存方块的状态(true有效/false空白)
+            var fields = []
+
+            //定义储存目标点的数组
+            var this_lefts = []
+            var this_rights = []
+            var this_ups = []
+            var this_downs = []
+
+            //计算目标点
+            function initTargetPoint(this_row, this_col){
+                this_lefts = []
+                this_rights = []
+                this_ups = []
+                this_downs = []
+
+                var step_col = this_col
+                //计算左边
+                while (step_col > 0){
+                    step_col -= 1
+                    //非空白方块退出
+                    if (fields[this_row][step_col]) break
+                    this_lefts.push(this_row+","+step_col)
+                    //例:this_lefts = ["2,2", "2,1", "2,0"]
+                }
+                step_col = this_col
+                while (step_col < max_col){
+                    step_col += 1
+                    if (fields[this_row][step_col]) break
+                    this_rights.push(this_row+","+step_col)
+                }
+                var step_row = this_row
+                while (step_row > 0){
+                    step_row -= 1
+                    if (fields[step_row][this_col]) break
+                    this_ups.push(step_row+","+this_col)
+                }
+                step_row = this_row
+                while (step_row < max_row){
+                    step_row += 1
+                    if (fields[step_row][this_col]) break
+                    this_downs.push(step_row+","+this_col)
+                }
+            }
+
+
+            //重置游戏
+            function reload(){
+                var $box = $("#box-link")
+                $box.find(".row").remove()
+                fields = []
+                //填充方块(max_row*max_col)
+                for(let row =0;row <= max_row;row++){
+                    var row_lst = []
+                    var str_row = `<div class="row">`
+                    for(let col =0;col <= max_col;col++){
+                        var str_ele = ""
+                        row_lst.push(false)
+                        str_ele = `<div class="step step-empty" data-row="${row}" data-col="${col}">${row},${col}</div>`
+                        str_row += str_ele
+                    }
+                    fields.push(row_lst)
+                    str_row += "</div>"
+                    $box.append(str_row)
+                }
+                //bucket储存选中的方块
+                var bucket = []
+                $(".step").on("click",function(){
+                    var row = $(this).data("row")
+                    var col = $(this).data("col")
+                    //点击*红框*的事件
+                    if( $(this).hasClass("step-active") ) {
+                        $(this).removeClass("step-active")
+                        initTargetPoint(row, col)
+                        console.log("(",row,",",col,")")
+                        console.log(this_ups)
+                        console.log(this_rights)
+                        console.log(this_downs)
+                        console.log(this_lefts)
+                        bucket.pop()
+                        return
+                    }
+                    //点击*灰框*的事件
+                    if( $(this).hasClass("step-empty") ) {
+                        $(this).removeClass("step-empty")
+                        fields[row][col] = true
+                        return
+                    }
+                    if (bucket.length == 1){ //选中两个点时linkStart()
+                        var $old = bucket.pop()
+                        $old.removeClass("step-active")
+                        
+                        linkStart($old, $(this))
+
+                    }else{
+                        bucket.push($(this))
+                        $(this).addClass("step-active")
+                    }
+                })
+            }
+            reload()
+
+            $("#btn-reload").click(function(){
+                reload()
+            })
+
+//----------------------------寻路逻辑-------------------------------------------
+            //是否相邻
+            function isNear(old_row, old_col, this_row, this_col){
+                if (old_col == this_col && Math.abs(old_row - this_row) == 1){
+                    return true
+                }
+                if (old_row == this_row && Math.abs(old_col - this_col) == 1){
+                    return true
+                }
+                return false
+            }
+
+            //A点(row, col)-->B点(row, col):
+            //begin_col = A.col  end_col = B.col
+            //fixed_row = A.row
+            function rightLink(begin_col, end_col, fixed_row){
+                console.log("----右")
+                var steps = []
+                var step_col = begin_col
+                while (step_col < end_col){
+                    step_col += 1
+                    if (fields[fixed_row][step_col]) break
+                    var row_col = fixed_row+","+step_col
+                    steps.push(row_col)
+                    var idx = this_lefts.indexOf(row_col)
+                    if (idx != -1){
+                        steps = steps.concat(this_lefts.slice(0, idx).reverse())
+                        return steps
+                    }
+                    idx = this_ups.indexOf(row_col)
+                    if (idx != -1){
+                        steps = steps.concat(this_ups.slice(0, idx).reverse())
+                        return steps
+                    }
+                    idx = this_downs.indexOf(row_col)
+                    if (idx != -1){
+                        steps = steps.concat(this_downs.slice(0, idx).reverse())
+                        return steps
+                    }
+                }//while end
+                return []
+            }
+
+            function downLink(begin_row, end_row, fixed_col){
+                console.log("----下")
+                var steps = []
+                var step_row = begin_row
+                while (step_row < end_row){
+                    step_row += 1
+                    if (fields[step_row][fixed_col]) break
+                    var row_col = step_row+","+fixed_col
+                    steps.push(row_col)
+                    var idx = this_ups.indexOf(row_col)
+                    if (idx != -1){
+                        steps = steps.concat(this_ups.slice(0, idx).reverse())
+                        return steps
+                    }
+                    idx = this_lefts.indexOf(row_col)
+                    if (idx != -1){
+                        steps = steps.concat(this_lefts.slice(0, idx).reverse())
+                        return steps
+                    }
+                    idx = this_rights.indexOf(row_col)
+                    if (idx != -1){
+                        steps = steps.concat(this_rights.slice(0, idx).reverse())
+                        return steps
+                    }
+                }//while end
+                return []
+            }
+
+            function leftLink(begin_col, end_col, fixed_row){
+                console.log("----左")
+                var steps = []
+                var step_col = begin_col
+                while (step_col > end_col){
+                    step_col -= 1
+                    if (fields[fixed_row][step_col]) break
+                    var row_col = fixed_row+","+step_col
+                    steps.push(row_col)
+                    var idx = this_rights.indexOf(row_col)
+                    if (idx != -1){
+                        steps = steps.concat(this_rights.slice(0, idx).reverse())
+                        return steps
+                    }
+                    idx = this_ups.indexOf(row_col)
+                    if (idx != -1){
+                        steps = steps.concat(this_ups.slice(0, idx).reverse())
+                        return steps
+                    }
+                    idx = this_downs.indexOf(row_col)
+                    if (idx != -1){
+                        steps = steps.concat(this_downs.slice(0, idx).reverse())
+                        return steps
+                    }
+                }//while end
+                return []
+            }
+
+            function upLink(begin_row, end_row, fixed_col){
+                console.log("----上")
+                var steps = []
+                var step_row = begin_row
+                while (step_row > end_row){
+                    step_row -= 1
+                    if (fields[step_row][fixed_col]) break
+                    var row_col = step_row+","+fixed_col
+                    steps.push(row_col)
+                    var idx = this_downs.indexOf(row_col)
+                    if (idx != -1){
+                        steps = steps.concat(this_downs.slice(0, idx).reverse())
+                        return steps
+                    }
+                    idx = this_lefts.indexOf(row_col)
+                    if (idx != -1){
+                        steps = steps.concat(this_lefts.slice(0, idx).reverse())
+                        return steps
+                    }
+                    idx = this_rights.indexOf(row_col)
+                    if (idx != -1){
+                        steps = steps.concat(this_rights.slice(0, idx).reverse())
+                        return steps
+                    }
+                }//while end
+                return []
+            }
+
+            function hideBoth($old, $this, steps){
+                console.log(steps.join("-->"))
+
+                var old_row = $old.data("row")
+                var old_col = $old.data("col")
+                var this_row = $this.data("row")
+                var this_col = $this.data("col")
+
+                fields[old_row][old_col] = false
+                fields[this_row][this_col] = false
+                $old.removeClass("step-active").addClass("step-empty")
+                $this.removeClass("step-active").addClass("step-empty")
+                console.log("=========success=========")
+            }
+
+
+            function linkStart($old, $this){
+                var old_row = $old.data("row")
+                var old_col = $old.data("col")
+                var this_row = $this.data("row")
+                var this_col = $this.data("col")
+                console.log("==========start==========")
+                console.log(old_row+','+old_col+"-->"+this_row+','+this_col)
+                var steps = []
+                if (isNear(old_row, old_col, this_row, this_col)){
+                    console.log("相邻")
+                    return hideBoth($old, $this, steps)
+                }
+                //old-->this, this的目标点
+                initTargetPoint(this_row, this_col)
+
+                //--右--下--左--上--
+                steps = rightLink(old_col, this_col, old_row)
+                if(steps.length > 0) return hideBoth($old, $this, steps)
+                steps = downLink(old_row, this_row, old_col)
+                if (steps.length > 0) return hideBoth($old, $this, steps)
+                steps = leftLink(old_col, this_col, old_row)
+                if (steps.length > 0) return hideBoth($old, $this, steps)
+                steps = upLink(old_row, this_row, old_col)
+                if (steps.length > 0) return hideBoth($old, $this, steps)
+
+                //开始尝试*折点为2*的连接
+                console.log("--尝试拐点为2的连接--")
+                var steps_sec =[]
+                var step_col = old_col
+                //每向右一步尝试upLink()和downLink()
+                while (step_col < max_col){
+                    step_col += 1
+                    if (fields[old_row][step_col]) break
+                    var row_col = old_row+","+step_col
+                    steps.push(row_col)
+                    console.log(row_col)
+                    steps_sec = upLink(old_row, this_row, step_col)
+                    if (steps_sec.length > 0) {
+                        steps = steps.concat(steps_sec)
+                        return hideBoth($old, $this, steps)
+                    }
+                    steps_sec = downLink(old_row, this_row, step_col)
+                    if (steps_sec.length > 0) {
+                        steps = steps.concat(steps_sec)
+                        return hideBoth($old, $this, steps)
+                    }
+                }
+                steps = []
+                var step_col = old_col
+                while (step_col > 0){
+                    step_col -= 1
+                    if (fields[old_row][step_col]) break
+                    var row_col = old_row+","+step_col
+                    steps.push(row_col)
+                    console.log(row_col)
+                    steps_sec = upLink(old_row, this_row, step_col)
+                    if (steps_sec.length > 0) {
+                        steps = steps.concat(steps_sec)
+                        return hideBoth($old, $this, steps)
+                    }
+                    steps_sec = downLink(old_row, this_row, step_col)
+                    if (steps_sec.length > 0) {
+                        steps = steps.concat(steps_sec)
+                        return hideBoth($old, $this, steps)
+                    }
+                }
+                steps = []
+                var step_row = old_row
+                while (step_row < max_row){
+                    step_row += 1
+                    if (fields[step_row][old_col]) break
+                    var row_col = step_row+","+old_col
+                    steps.push(row_col)
+                    console.log(row_col)
+                    steps_sec = leftLink(old_col, this_col, step_row)
+                    if (steps_sec.length > 0) {
+                        steps = steps.concat(steps_sec)
+                        return hideBoth($old, $this, steps)
+                    }
+                    steps_sec = rightLink(old_col, this_col, step_row)
+                    if (steps_sec.length > 0) {
+                        steps = steps.concat(steps_sec)
+                        return hideBoth($old, $this, steps)
+                    }
+                }
+                steps = []
+                var step_row = old_row
+                while (step_row > 0){
+                    step_row -= 1
+                    if (fields[step_row][old_col]) break
+                    var row_col = step_row+","+old_col
+                    steps.push(row_col)
+                    console.log(row_col)
+                    steps_sec = leftLink(old_col, this_col, step_row)
+                    if (steps_sec.length > 0) {
+                        steps = steps.concat(steps_sec)
+                        return hideBoth($old, $this, steps)
+                    }
+                    steps_sec = rightLink(old_col, this_col, step_row)
+                    if (steps_sec.length > 0) {
+                        steps = steps.concat(steps_sec)
+                        return hideBoth($old, $this, steps)
+                    }
+                }
+                console.log("===========end===========")
+                return false
+            }
+
+        })
+    </script>
+</header>
+<body>
+    <div id="box-link" class="box-link"></div>
+
+    <div class="box-btn">
+        <div id="btn-reload" class="btn-reload">重置</div>
+    </div>
+    <div class="box-desc">
+        <p>操作说明:</p>
+        <p>点击*灰框*方块使其有效</p>
+        <p>点击*蓝框*方块选中</p>
+        <p>点击*红框*计算目标点</p>
+        <p>*F12*打开调试模式</p>
+    </div>
+</body>
+</html>
